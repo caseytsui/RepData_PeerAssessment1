@@ -1,20 +1,148 @@
-# Reproducible Research: Peer Assessment 1
+PEER ASSESSMENT 1 - REPRODUCIBLE RESEARCH
+=========================================
+
+By Casey Tsui  
+Format: R Markdown  
+Last updated: 7/19/14  
+
+## Author's notes
+
+This markdown code downloads, loads, and analyzes the physical activity data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+## Download the data into a temp file and then load data
+
+First I download the data from the internet, then I load the data into memory into the object named "data".
+
+```{r setwd, echo=TRUE}
+# Libraries
+library(plyr)
+library(ggplot2)
+
+# Download data to temp file
+f <- tempfile()
+file_url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(file_url, destfile=f, method="curl")
+
+# Unzip the file and read in data
+data <- read.csv(unzip(f))
+```
+
+## Clean data
+
+The dates in the file are then converted to standard format: YYYY-MM-DD.
 
 
-## Loading and preprocessing the data
+```{r convert_dates, echo=TRUE}
+data$date <- as.Date(data$date, "%Y-%m-%d")
+```
 
+## Analysis
 
+I then calculated the total number of steps taken each day.
 
-## What is mean total number of steps taken per day?
+```{r , echo=TRUE}
+totalsteps <- ddply(data,
+                    .(date),
+                    function(df)
+                        c(totalsteps = sum(df$steps, na.rm=TRUE)))
+```
 
+Here's a histogram of total number of steps taken each day:
 
+```{r hist, echo=TRUE}
+hist(totalsteps$totalsteps)
+```
 
-## What is the average daily activity pattern?
+Next, I calculate the mean and median of the total steps 
 
+```{r , echo=TRUE}
+mean_steps <- mean(totalsteps$totalsteps, na.rm=TRUE)
+median_steps <- median(totalsteps$totalsteps, na.rm=TRUE)
+```
 
+The mean number of total steps is `r mean_steps` and the median number of total steps is `r median_steps`.
 
-## Imputing missing values
+Here's a time series plot of average number of steps for each 5-minute interval.
 
+```{r time_series, echo=TRUE}
+avgdailysteps <- ddply(data,
+                       .(interval),
+                       function(df)
+                           c(avgsteps = mean(df$steps, na.rm=TRUE)))
+ggplot(avgdailysteps,
+       aes(x=interval, y=avgsteps)) +
+       geom_line()
+```
 
+```{r maxstepinterval, echo=TRUE}
+maxstepinterval <- avgdailysteps[which(avgdailysteps$avgsteps == max(avgdailysteps$avgsteps)), "interval"]
+```
+
+The average maximum number of steps occurs in the `r maxstepinterval` interval of the day.
+
+```{r missing, echo=TRUE}
+missing <- sum(is.na(data$steps))
+```
+
+The number of missing values for step data is `r missing`.
+
+In order to fill in all of the missing values in the dataset, the total median steps was imputed into all missing step values in the original data set.
+
+```{r new_data, echo=TRUE}
+new_data <- data
+
+new_data$steps[which(is.na(new_data$steps))] <- median_steps
+
+new_totalsteps <- ddply(new_data,
+                        .(date),
+                        function(df)
+                            c(totalsteps = sum(df$steps, na.rm=TRUE)))
+```
+
+Here's a histogram of the new data:
+
+```{r new_hist, echo=TRUE}
+hist(new_totalsteps$totalsteps)
+```
+
+I then calculated a new mean and median for total steps.
+
+```{r new_mean, echo=TRUE}
+new_mean <- mean(new_totalsteps$totalsteps, na.rm=TRUE)
+new_median <- median(new_totalsteps$totalsteps, na.rm=TRUE)
+```
+
+The new mean total steps is `r new_mean` and the new median total steps is `r new_median`.
+
+The total steps value clearly is the most different from the original value. Instead of a unimodal distribution that resembles a skewed normal distribution, the histogram of the new total steps for each date is bimodal. Meanwhile, imputing the values of the missing step data with the median steps for that date and interval caused the mean total steps to hugely increase, while the median total steps, being a more robust estimate to variation, increased only by about 1,000 steps.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+I created a new factor variable in data for weekday or weekend.
+
+```{r weekdays, echo=TRUE}
+new_data$weekdays <- weekdays(new_data$date)
+new_data$weekdays <- ifelse(new_data$weekdays == "Saturday" | new_data$weekdays == "Sunday",
+                        "weekend",
+                        "weekday")
+new_data$weekdays <- factor(new_data$weekdays, levels=c("weekend", "weekday"))
+```
+
+Here's a panel plot containing a time series of the intervals disaggregated by weekend or weekday. Instead of just showing weekend and weekday values as vertical facets, I decided to show them both horizontally and vertically to compare peaks better.
+
+```{r, echo=TRUE}
+avgdailysteps_wd <- ddply(new_data,
+                          .(interval, weekdays),
+                          function(df)
+                              c(avgsteps = mean(df$steps, na.rm=TRUE)))
+
+ggplot(avgdailysteps_wd, aes(x=interval, y=avgsteps)) +
+       geom_line() +
+       facet_grid(.~weekdays)
+ggplot(avgdailysteps_wd, aes(x=interval, y=avgsteps)) +
+       geom_line() +
+       facet_grid(weekdays~.)
+```
+
+From the panel plot, you can see that on average, weekday average step counts are higher than the weekend average step counts.
+
